@@ -1,3 +1,5 @@
+/* jshint esversion: 6 */
+
 var express = require('express');
 var app = express();
 var http = require('http').createServer(app);
@@ -7,6 +9,7 @@ var User = require('../models/user');
 var session = require('express-session');
 var mongoose = require('mongoose');
 var MongoStore = require('connect-mongo')(session);
+var cookie = require('cookie');
 
 mongoose.connect('mongodb://localhost/test', { useNewUrlParser: true });
 var db = mongoose.connection;
@@ -16,14 +19,15 @@ db.once('open', function () {
   console.log('Connected to db');
 });
 
-app.use(session({
+var session = session({
   secret: 'change me later',
   resave: 'true',
   saveUninitialized: 'false',
   store: new MongoStore({
     mongooseConnection: db
   })
-}));
+});
+app.use(session);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -86,14 +90,25 @@ app.get('/logout', function(req, res, next) {
   }
 });
 
+// authorization
+io.use(function(socket, next) {
+  req = socket.handshake;
+  res = { end: function() {} };
+  
+  session(req, res, function() {
+    next();
+  });
+});
+
 io.on('connection', function(socket){
-  console.log('a user connected');
+  var userId = socket.handshake.session.userId;
+  console.log(`user ${userId} connected`);
   socket.on('chat message', function(msg) {
-    console.log('message: ' + msg);
+    console.log(`message(${userId}): ${msg}`);
     io.emit('chat message', msg);
   });
   socket.on('disconnect', function() {
-    console.log('user disconnected');
+    console.log(`user ${userId} disconnected`);
   });
 });
 
